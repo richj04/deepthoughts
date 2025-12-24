@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Deep Thoughts</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: auto; }
+        input, button { padding: 10px; margin: 5px 0; width: 100%; }
+        ul { list-style-type: none; padding-left: 0; }
+        li { border-bottom: 1px solid #ccc; padding: 5px 0; }
+        .message-email { font-weight: bold; }
+        .message-time { font-size: 0.8em; color: gray; }
+    </style>
+
+    <style>
+        #app {
+            display:flex;
+            height:100vh;
+        }
+
+        #left-panel {
+            flex: 0 0 25%;
+            padding: 16px;
+            min-width: 280px;
+
+            display:flex;
+            flex-direction: column;
+            gap: 12px;
+            
+        }
+
+        #left-panel input
+        #left-panel textarea {
+            flex: 1;
+            min-height: 500px;
+            resize: vertical;
+            flex-shrink: 0;
+        }
+        #left-panel button {
+            width: 100%;
+            box-sizing: border-box;
+        }
+        #left-panel h2 {
+            white-space: nowrap;
+        }
+
+        #right-panel {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px
+        }
+    </style>
+
+    <!-- Google Sign-In library -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<div id="app">
+    
+    <div id="left-panel">
+        <h1>Deep Thoughts</h1>
+         <!-- Google Sign-In button -->
+        <div id="g_id_onload"
+         data-client_id="816648596012-62j6i7880ve1vav3c6r95npgqj4pe8a1.apps.googleusercontent.com"
+         data-callback="handleCredentialResponse">
+        </div>
+        <div class="g_id_signin" data-type="standard"></div>
+
+        <h2>Post a Message</h2>
+        <textarea id="content" placeholder="Type your message..."></textarea>
+        <p id="char-count">250 characters left</p>
+        <div id="message-limit">
+            Messages left today: <span id="messages-left">2</span>
+        </div>
+        <button id="post-btn">Post Message</button>
+
+    </div>
+
+    <div id = "right-panel">
+        <h2>Messages</h2>
+        <ul id="message-list"></ul>
+    </div>
+
+    <script>
+        const textarea = document.getElementById("content");
+        const charCount = document.getElementById("char-count")
+
+        textarea.addEventListener("input", () => {
+            if (textarea.value.length > 250) {
+                textarea.value = textarea.value.slice(0, 250);
+            }
+            const remaining = 250 - textarea.value.length;
+            if(remaining >= 0){
+                charCount.textContent = `${remaining} characters left`;
+            }else{
+                charCount.textContent = `0 characters left`;
+            }
+            
+        });
+    </script>
+
+    <script>
+        // Store signed-in user email
+        let userEmail = null;
+
+        function handleCredentialResponse(response) {
+            const decoded = parseJwt(response.credential);
+            userEmail = decoded.email;
+            console.log("Signed in as:", userEmail);
+            document.querySelector(".g_id_signin").style.display = "none"; // hide sign-in button
+
+            updateMessagesLeft();
+        }
+
+        // Simple JWT decoder to extract email
+        function parseJwt(token) {
+            const base64Url = token.split('.')[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+            return JSON.parse(jsonPayload);
+        }
+
+        //convert to local time
+        function formatTimestamp(utcString){
+            const date = new Date(utcString);
+            return date.toLocaleString([],{
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit"
+            });
+        }
+
+        // Load messages from backend
+        async function loadMessages() {
+            const response = await fetch("/messages");
+            const messages = await response.json();
+            const list = document.getElementById("message-list");
+            list.innerHTML = ""; // clear previous
+            messages.forEach(msg => {
+                const li = document.createElement("li");
+                li.innerHTML = `
+                    <span class="message-email">${msg.email}</span>
+                    <span class="message-time">${formatTimestamp(msg.timestamp)}</span>
+                    <p>${msg.content}</p>
+                `;
+                list.appendChild(li);
+            });
+            const rightPanel = document.getElementById("right-panel");
+            rightPanel.scrollTop = rightPanel.scrollHeight;
+        }
+
+        //updates Messages Left
+        async function updateMessagesLeft(){
+            if (!userEmail){
+                document.getElementById("messages-left").textContent = "Sign in to see remaining messages."
+                return
+            }
+            const response = await fetch(`/messages/count?email=${userEmail}`);
+            const data = await response.json();
+            const remaining = 2 - data.count;
+            document.getElementById("messages-left").textContent = remaining;
+        }
+
+        // Post message to backend
+        document.getElementById("post-btn").addEventListener("click", async () => {
+            if (!userEmail) {
+                alert("Please sign in with Google to post a message!");
+                return;
+            }
+
+            const content = document.getElementById("content").value;
+            if (!content.trim()) return;
+
+            await fetch("/post_message", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: userEmail, content })
+            });
+
+            document.getElementById("content").value = ""; // clear textarea
+            loadMessages();
+            updateMessagesLeft();
+        });
+
+        // Load messages every time page loads
+        loadMessages();
+        updateMessagesLeft();
+    </script>
+</div>
+
+</html>
