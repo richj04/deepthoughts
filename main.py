@@ -5,6 +5,8 @@ from pydantic import BaseModel
 from database import init_db, insert_message, get_all_messages, get_db, get_connection
 from datetime import datetime
 import sqlite3
+import os
+import uvicorn
 
 app = FastAPI()
 app.mount('/static', StaticFiles(directory = 'static'), name = 'static')
@@ -76,3 +78,8 @@ async def messages_count(email:str):
         """, (email, today))
         count = cursor.fetchone()[0]
         return {"count": count}
+    
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))  # Railway sets this automatically
+    uvicorn.run(app, host="0.0.0.0", port=port)
